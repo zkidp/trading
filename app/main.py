@@ -1,19 +1,22 @@
 """Main entrypoint for the daily AI-Quant job.
 
-The system MUST be safe by default:
+Safety rules:
 - DRY_RUN defaults to true
-- Any failure in external dependencies should result in NO trading.
+- Any failure in external dependencies should result in NO trading
 
-This module will be expanded step-by-step.
+This file is implemented incrementally (small commits).
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from datetime import datetime, timezone
 
 from loguru import logger
+
+from app.db.session import build_engine, init_db
 
 
 def _utc_now() -> datetime:
@@ -27,15 +30,30 @@ def _get_bool_env(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def main() -> int:
+async def _async_main() -> int:
     dry_run = _get_bool_env("DRY_RUN", True)
     trading_mode = os.getenv("TRADING_MODE", "paper")
 
-    logger.info("AI-Quant 启动 | now_utc={} | dry_run={} | trading_mode={}", _utc_now().isoformat(), dry_run, trading_mode)
+    logger.info(
+        "AI-Quant 启动 | now_utc={} | dry_run={} | trading_mode={}",
+        _utc_now().isoformat(),
+        dry_run,
+        trading_mode,
+    )
 
-    # Placeholder: real pipeline will be implemented in subsequent commits.
-    logger.warning("当前为骨架版本：尚未实现采集/AI/落库/交易。系统将安全退出（不交易）。")
+    # Step 1 (P0-3): DB init.
+    engine = build_engine()
+    try:
+        await init_db(engine)
+    finally:
+        await engine.dispose()
+
+    logger.info("数据库初始化完成。当前版本尚未实现采集/AI/交易，安全退出（不交易）。")
     return 0
+
+
+def main() -> int:
+    return asyncio.run(_async_main())
 
 
 if __name__ == "__main__":
