@@ -88,7 +88,54 @@ async def _async_main() -> int:
         logger.exception("RawNews 入库阶段异常：安全退出（不交易）")
         return 0
 
-    logger.info("当前版本尚未实现 AI/交易，安全退出（不交易）。")
+    # Step 4/5 (P0-5/6): AI analyze + write SentimentSignal + select Top1.
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        logger.warning("DEEPSEEK_API_KEY 未配置：跳过 AI 分析与交易（安全）")
+        return 0
+
+    try:
+        from datetime import timedelta
+
+        from app.db.crud import insert_signals, select_top1_today_no_risk
+        from app.processors.ai_analyzer import AIAnalyzer
+
+        titles = [x.raw_title for x in raw_items if x.raw_title]
+        analyzer = AIAnalyzer(api_key=api_key, batch_size=15, timeout_s=25)
+        analyzed = analyzer.analyze_titles(titles)
+
+        now_utc = _utc_now()
+        day_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        engine = build_engine()
+        session_maker = build_session_maker(engine)
+        try:
+            async with session_maker() as session:
+                inserted_signals = await insert_signals(session, analyzed, created_at=now_utc)
+                await session.commit()
+
+                top1 = await select_top1_today_no_risk(session, day_start_utc=day_start)
+        finally:
+            await engine.dispose()
+
+        logger.info("AI 分析完成 | titles={} | signals_inserted={}", len(titles), inserted_signals)
+        if top1 is None:
+            logger.warning("Top1 不存在（可能无 ticker 或都有风险标签）：今日不交易")
+            return 0
+
+        logger.info(
+            "Top1 信号 | ticker={} | score={} | risk_tags={} | summary={}",
+            top1.ticker,
+            top1.score,
+            top1.risk_tags,
+            top1.ai_summary,
+        )
+
+    except Exception:
+        logger.exception("AI/Signal 阶段异常：安全退出（不交易）")
+        return 0
+
+    logger.info("当前版本尚未实现 IB 下单（仅输出 Top1），安全退出（不交易）。")
     return 0
 
 

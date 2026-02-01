@@ -3,11 +3,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from loguru import logger
+from datetime import datetime
+
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors.rss_collector import RawNewsIn
-from app.db.models import RawNews
+from app.db.models import RawNews, SentimentSignal
+from app.processors.ai_analyzer import AnalyzedItem
 
 
 async def insert_raw_news(session: AsyncSession, items: Sequence[RawNewsIn]) -> int:
@@ -40,3 +44,34 @@ async def insert_raw_news(session: AsyncSession, items: Sequence[RawNewsIn]) -> 
     # rowcount is supported for INSERT ... ON CONFLICT DO NOTHING in many cases.
     inserted = int(result.rowcount or 0)
     return inserted
+
+
+async def insert_signals(session: AsyncSession, items: Sequence[AnalyzedItem], created_at: datetime) -> int:
+    if not items:
+        return 0
+
+    rows = [
+        SentimentSignal(
+            ticker=i.ticker,
+            score=i.sentiment,
+            risk_tags=i.risk_tags,
+            ai_summary=i.summary,
+            created_at=created_at,
+        )
+        for i in items
+    ]
+    session.add_all(rows)
+    return len(rows)
+
+
+async def select_top1_today_no_risk(session: AsyncSession, day_start_utc: datetime) -> SentimentSignal | None:
+    stmt = (
+        select(SentimentSignal)
+        .where(SentimentSignal.created_at >= day_start_utc)
+        .where(SentimentSignal.ticker.is_not(None))
+        .where(SentimentSignal.risk_tags == [])
+        .order_by(SentimentSignal.score.desc())
+        .limit(1)
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
