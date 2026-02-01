@@ -135,7 +135,34 @@ async def _async_main() -> int:
         logger.exception("AI/Signal 阶段异常：安全退出（不交易）")
         return 0
 
-    logger.info("当前版本尚未实现 IB 下单（仅输出 Top1），安全退出（不交易）。")
+    # Step 6/7 (P0-7): IB executor
+    try:
+        from app.broker.executor import IBExecutor
+
+        if top1.ticker is None:
+            logger.warning("Top1 ticker 为空：不交易")
+            return 0
+
+        amount_usd = float(os.getenv("INVEST_AMOUNT_USD", "40"))
+        dry_run_effective = _get_bool_env("DRY_RUN", True)
+
+        async with IBExecutor(dry_run=dry_run_effective) as ex:
+            result = await ex.buy_fractional_by_amount(top1.ticker, amount_usd=amount_usd)
+
+        logger.info(
+            "执行完成 | dry_run={} | ticker={} | amount_usd={} | price={} | qty={} | status={}",
+            result.dry_run,
+            result.ticker,
+            result.amount_usd,
+            result.price,
+            result.qty,
+            result.order_status,
+        )
+
+    except Exception:
+        logger.exception("IB 执行阶段异常：安全退出（不交易）")
+        return 0
+
     return 0
 
 
