@@ -68,6 +68,7 @@ class RedditCollector:
                         permalink = (getattr(p, "permalink", None) or "").strip()
                         url = f"https://www.reddit.com{permalink}" if permalink else (getattr(p, "url", None) or "")
                         url = url.strip()
+                        # Ensure url is not empty; DB dedup relies on url unique.
                         if not title and not url:
                             continue
 

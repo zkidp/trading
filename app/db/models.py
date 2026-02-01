@@ -6,6 +6,8 @@ from sqlalchemy import DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+# Note: keep ORM models simple; migrations can be added later if needed.
+
 
 class Base(DeclarativeBase):
     pass

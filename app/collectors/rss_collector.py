@@ -60,6 +60,11 @@ class RSSCollector:
                     continue
                 seen.add(key)
 
+                if not url:
+                    # Without url, DB-level unique dedup cannot work reliably; still keep it in memory,
+                    # but main pipeline will skip url-less records when inserting.
+                    logger.debug("RSS 条目缺少 url | source={} | title={}", src.name, title)
+
                 out.append(
                     RawNewsIn(
                         source=src.name,
