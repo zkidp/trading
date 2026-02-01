@@ -48,7 +48,28 @@ async def _async_main() -> int:
     finally:
         await engine.dispose()
 
-    logger.info("数据库初始化完成。当前版本尚未实现采集/AI/交易，安全退出（不交易）。")
+    # Step 2 (P0-4): Collect titles (no DB write yet in this commit).
+    try:
+        from app.collectors.rss_collector import RSSCollector, RSSSource
+        from app.collectors.reddit_collector import RedditCollector
+
+        rss_sources = [
+            RSSSource(name="yahoo_finance", url="https://finance.yahoo.com/news/rssindex"),
+            RSSSource(name="cnbc_topnews", url="https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+        ]
+        rss_items = RSSCollector(rss_sources).fetch()
+        reddit_items = RedditCollector(subreddits=["stocks", "investing"], limit=50).fetch()
+        logger.info(
+            "采集完成 | rss={} | reddit={} | total={} (当前版本仅采集不落库)",
+            len(rss_items),
+            len(reddit_items),
+            len(rss_items) + len(reddit_items),
+        )
+    except Exception:
+        logger.exception("采集阶段异常：安全退出（不交易）")
+        return 0
+
+    logger.info("当前版本尚未实现 AI/交易，安全退出（不交易）。")
     return 0
 
 

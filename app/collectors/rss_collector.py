@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+
+import feedparser
+from loguru import logger
 
 
 @dataclass(frozen=True)
@@ -18,13 +21,52 @@ class RawNewsIn:
     fetched_at: datetime
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class RSSCollector:
     def __init__(self, sources: list[RSSSource]) -> None:
         self._sources = sources
 
     def fetch(self) -> list[RawNewsIn]:
-        """Fetch RSS items.
+        """Fetch RSS items and normalize into RawNewsIn.
 
-        NOTE: Implementation to be added.
+        - Dedup based on url or title (in-memory)
+        - fetched_at is always UTC now
         """
-        return []
+        fetched_at = _utc_now()
+        seen: set[str] = set()
+        out: list[RawNewsIn] = []
+
+        for src in self._sources:
+            try:
+                feed = feedparser.parse(src.url)
+            except Exception:
+                logger.exception("RSS 抓取失败 | source={} | url={}", src.name, src.url)
+                continue
+
+            entries = getattr(feed, "entries", []) or []
+            logger.info("RSS 抓取 | source={} | entries={}", src.name, len(entries))
+
+            for e in entries:
+                title = (getattr(e, "title", None) or "").strip()
+                url = (getattr(e, "link", None) or "").strip()
+                if not title and not url:
+                    continue
+
+                key = url or title
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                out.append(
+                    RawNewsIn(
+                        source=src.name,
+                        raw_title=title or url,
+                        url=url or "",
+                        fetched_at=fetched_at,
+                    )
+                )
+
+        return out
