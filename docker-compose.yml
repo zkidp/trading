@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  ib-gateway:
+    image: gnzsnz/ib-gateway-docker:latest
+    restart: unless-stopped
+    environment:
+      TWS_USERID: ${TWS_USERID}
+      TWS_PASSWORD: ${TWS_PASSWORD}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+    ports:
+      - "4001:4001"  # IB API
+      - "5900:5900"  # VNC
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - ib-gateway
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT}
+      DRY_RUN: ${DRY_RUN:-true}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+    command: ["python", "-m", "app.main"]
+
+volumes:
+  pgdata:

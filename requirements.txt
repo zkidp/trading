@@ -6,3 +6,14 @@ scikit-learn
 jupyter
 ipykernel
 yfinance
+
+# app runtime
+feedparser
+praw
+tenacity
+loguru
+openai
+SQLAlchemy[asyncio]
+asyncpg
+ib_insync
+psycopg2-binary
