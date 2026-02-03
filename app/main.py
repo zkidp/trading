@@ -78,12 +78,16 @@ async def _async_main() -> int:
         session_maker = build_session_maker(engine)
         try:
             async with session_maker() as session:
-                inserted = await insert_raw_news(session, raw_items)
+                inserted_rows = await insert_raw_news(session, raw_items)
                 await session.commit()
         finally:
             await engine.dispose()
 
-        logger.info("RawNews 入库完成 | total={} | inserted={} (url unique 去重)", len(raw_items), inserted)
+        logger.info(
+            "RawNews 入库完成 | total={} | inserted={} (url unique 去重)",
+            len(raw_items),
+            len(inserted_rows),
+        )
     except Exception:
         logger.exception("RawNews 入库阶段异常：安全退出（不交易）")
         return 0
@@ -95,12 +99,14 @@ async def _async_main() -> int:
         return 0
 
     try:
-        from datetime import timedelta
-
         from app.db.crud import insert_signals, select_top1_today_no_risk
         from app.processors.ai_analyzer import AIAnalyzer
 
-        titles = [x.raw_title for x in raw_items if x.raw_title]
+        if not inserted_rows:
+            logger.warning("本次没有新增 RawNews：跳过 AI 分析与交易（安全）")
+            return 0
+
+        titles = [x.raw_title for x in inserted_rows if x.raw_title]
         analyzer = AIAnalyzer(api_key=api_key, batch_size=15, timeout_s=25)
         analyzed = analyzer.analyze_titles(titles)
 
@@ -143,11 +149,70 @@ async def _async_main() -> int:
             logger.warning("Top1 ticker 为空：不交易")
             return 0
 
+        from app.broker.risk import get_float_env, get_int_env
+        from app.db.execution import count_executions_since, insert_execution
+
         amount_usd = float(os.getenv("INVEST_AMOUNT_USD", "40"))
         dry_run_effective = _get_bool_env("DRY_RUN", True)
 
-        async with IBExecutor(dry_run=dry_run_effective) as ex:
-            result = await ex.buy_fractional_by_amount(top1.ticker, amount_usd=amount_usd)
+        min_sent = get_float_env("MIN_SENTIMENT_TO_TRADE", 0.3)
+        max_daily_trades = get_int_env("MAX_DAILY_TRADES", 1)
+
+        if float(top1.score) < float(min_sent):
+            logger.warning("Top1 分数低于阈值：不交易 | score={} < min_sentiment={}", top1.score, min_sent)
+            return 0
+
+        now_utc = _utc_now()
+        day_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        engine = build_engine()
+        session_maker = build_session_maker(engine)
+        try:
+            async with session_maker() as session:
+                trades_today = await count_executions_since(session, day_start)
+        finally:
+            await engine.dispose()
+
+        if trades_today >= max_daily_trades:
+            logger.warning(
+                "触发 MAX_DAILY_TRADES：不交易 | trades_today={} | max_daily_trades={}",
+                trades_today,
+                max_daily_trades,
+            )
+            return 0
+
+        error: str | None = None
+        result = None
+        try:
+            async with IBExecutor(dry_run=dry_run_effective) as ex:
+                result = await ex.buy_fractional_by_amount(top1.ticker, amount_usd=amount_usd)
+        except Exception as e:
+            error = str(e)
+            raise
+        finally:
+            # Always record an execution row for audit/kill-switch purposes.
+            engine = build_engine()
+            session_maker = build_session_maker(engine)
+            try:
+                async with session_maker() as session:
+                    await insert_execution(
+                        session,
+                        ticker=top1.ticker,
+                        amount_usd=amount_usd,
+                        price=None if result is None else result.price,
+                        qty=None if result is None else result.qty,
+                        dry_run=dry_run_effective,
+                        order_status=None if result is None else result.order_status,
+                        error=error,
+                        created_at=now_utc,
+                    )
+                    await session.commit()
+            finally:
+                await engine.dispose()
+
+        if result is None:
+            logger.warning("未产生执行结果：不交易")
+            return 0
 
         logger.info(
             "执行完成 | dry_run={} | ticker={} | amount_usd={} | price={} | qty={} | status={}",
