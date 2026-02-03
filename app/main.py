@@ -60,6 +60,32 @@ async def _async_main() -> int:
     finally:
         await engine.dispose()
 
+    # Step 1.5: Daily account/position snapshot for preopen/postclose (best effort).
+    if run_phase.lower() in {"preopen", "postclose"}:
+        try:
+            from app.broker.executor import IBExecutor
+            from app.broker.observer import fetch_account_values, fetch_positions
+            from app.db.snapshots import insert_account_snapshot, insert_position_snapshots
+
+            now_utc = _utc_now()
+            async with IBExecutor(dry_run=True) as ex:
+                account_v = await fetch_account_values(ex.ib)
+                positions_v = await fetch_positions(ex.ib)
+
+            engine = build_engine()
+            session_maker = build_session_maker(engine)
+            try:
+                async with session_maker() as session:
+                    await insert_account_snapshot(session, account_v, created_at=now_utc)
+                    await insert_position_snapshots(session, positions_v, created_at=now_utc)
+                    await session.commit()
+            finally:
+                await engine.dispose()
+
+            logger.info("已记录账户/持仓快照 | positions={}", len(positions_v))
+        except Exception:
+            logger.exception("账户/持仓快照失败（不影响后续流程）")
+
     # Step 2 (P0-4): Collect titles.
     try:
         from app.collectors.rss_collector import RSSCollector, RSSSource
