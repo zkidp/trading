@@ -1,0 +1,22 @@
+# Example cron (recommended): run with US/Eastern timezone.
+# Edit times if needed; DST handled by TZ.
+#
+# Install:
+#   crontab -e
+#   (paste lines below)
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Monitor news keyword hits every 30 minutes (writes to qmd news md + DB)
+TZ=America/New_York
+*/30 * * * * /home/zeke/trading/scripts/monitor.sh >> /home/zeke/trading/logs/monitor.log 2>&1
+
+# Pre-open run: 30 min before 09:30 ET => 09:00 ET
+0 9 * * 1-5 /home/zeke/trading/scripts/run_compose.sh preopen >> /home/zeke/trading/logs/preopen.log 2>&1
+
+# Post-close run: 10 min after 16:00 ET => 16:10 ET
+10 16 * * 1-5 /home/zeke/trading/scripts/run_compose.sh postclose >> /home/zeke/trading/logs/postclose.log 2>&1
+
+# Daily email brief after close (example 16:20 ET)
+20 16 * * 1-5 /home/zeke/trading/scripts/daily_brief.sh >> /home/zeke/trading/logs/brief.log 2>&1
