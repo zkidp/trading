@@ -99,16 +99,26 @@ async def _async_main() -> int:
                 now_utc = _utc_now()
                 try:
                     from app.db.alerts import insert_news_alerts
+                    from app.news_writer import NewsHit, append_news_markdown
 
+                    flat_hits: list[NewsHit] = []
                     async with session_maker() as session:
-                        total_alerts = 0
                         for kw, rows in hits.items():
-                            total_alerts += await insert_news_alerts(session, keyword=kw, items=rows, created_at=now_utc)
+                            await insert_news_alerts(session, keyword=kw, items=rows, created_at=now_utc)
+                            for (src, title, url) in rows:
+                                flat_hits.append(NewsHit(keyword=kw, source=src, title=title, url=url))
                         await session.commit()
+
+                    md_path = append_news_markdown(now_utc=now_utc, hits=flat_hits)
                 finally:
                     await engine.dispose()
 
-                logger.warning("新闻监控命中 | keywords={} | alerts={}", list(hits.keys()), sum(len(v) for v in hits.values()))
+                logger.warning(
+                    "新闻监控命中 | keywords={} | hits={} | md_path={}",
+                    list(hits.keys()),
+                    sum(len(v) for v in hits.values()),
+                    str(md_path) if md_path else None,
+                )
             else:
                 logger.info("新闻监控：未命中关键词")
 
