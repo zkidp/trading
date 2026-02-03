@@ -41,6 +41,9 @@ services:
       DRY_RUN: ${DRY_RUN:-true}
       TRADING_MODE: ${TRADING_MODE:-paper}
       RUN_PHASE: ${RUN_PHASE:-preopen}
+    volumes:
+      # Persist qmd markdown outputs from inside container to host.
+      - /home/zeke/.openclaw:/root/.openclaw
     command: ["python", "-m", "app.main"]
 
   # Lite app runner for monitor/brief/evaluate: does NOT depend on ib-gateway.
@@ -62,6 +65,8 @@ services:
       DRY_RUN: ${DRY_RUN:-true}
       TRADING_MODE: ${TRADING_MODE:-paper}
       RUN_PHASE: ${RUN_PHASE:-monitor}
+    volumes:
+      - /home/zeke/.openclaw:/root/.openclaw
     command: ["python", "-m", "app.main"]
 
 volumes:
