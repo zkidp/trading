@@ -6,6 +6,7 @@ scikit-learn
 jupyter
 ipykernel
 yfinance
+pandas-market-calendars
 
 # app runtime
 feedparser

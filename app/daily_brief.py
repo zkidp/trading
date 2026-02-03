@@ -9,7 +9,7 @@ from pathlib import Path
 from loguru import logger
 from sqlalchemy import desc, select
 
-from app.db.models import AccountSnapshot, NewsAlert, PositionSnapshot, TradeExecution
+from app.db.models import AccountSnapshot, NewsAlert, PositionSnapshot, TradeExecution, TradeOutcome
 from app.db.session import build_engine, build_session_maker, init_db
 
 
@@ -19,6 +19,7 @@ class BriefData:
     latest_account: AccountSnapshot | None
     positions: list[PositionSnapshot]
     executions: list[TradeExecution]
+    outcomes: list[TradeOutcome]
 
 
 def _utc_now() -> datetime:
@@ -68,7 +69,10 @@ async def _load_data(*, now_utc: datetime) -> BriefData:
             exec_stmt = select(TradeExecution).where(TradeExecution.created_at >= start).order_by(desc(TradeExecution.created_at)).limit(50)
             executions = list((await session.execute(exec_stmt)).scalars().all())
 
-            return BriefData(alerts=alerts, latest_account=latest_account, positions=positions, executions=executions)
+            out_stmt = select(TradeOutcome).order_by(desc(TradeOutcome.computed_at)).limit(50)
+            outcomes = list((await session.execute(out_stmt)).scalars().all())
+
+            return BriefData(alerts=alerts, latest_account=latest_account, positions=positions, executions=executions, outcomes=outcomes)
     finally:
         await engine.dispose()
 
@@ -114,6 +118,16 @@ def _render_markdown(*, now_utc: datetime, data: BriefData) -> str:
         for e in data.executions:
             lines.append(
                 f"- {e.created_at.isoformat()} | {e.ticker} | amount={e.amount_usd} | dry_run={e.dry_run} | price={e.price} | qty={e.qty} | status={e.order_status} | error={e.error}\n"
+            )
+
+    # Outcomes
+    lines.append("\n## Strategy Outcomes (T+3 / T+7 close-to-close, vs SPY)\n")
+    if not data.outcomes:
+        lines.append("- (no outcomes computed yet)\n")
+    else:
+        for o in data.outcomes[:20]:
+            lines.append(
+                f"- exec_id={o.trade_execution_id} {o.ticker} entry={o.entry_session} | T+3={o.t3_return:.3%} (SPY {o.spy_t3_return:.3%}) | T+7={o.t7_return:.3%} (SPY {o.spy_t7_return:.3%}) | computed_at={o.computed_at.isoformat()}\n"
             )
 
     # Alerts

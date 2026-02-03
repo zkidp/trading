@@ -82,3 +82,26 @@ class NewsAlert(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class TradeOutcome(Base):
+    __tablename__ = "trade_outcome"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trade_execution_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+
+    # Evaluation aligned to NYSE sessions; stored as ISO date string for simplicity.
+    entry_session: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    entry_close: Mapped[float] = mapped_column(Float, nullable=False)
+    t3_close: Mapped[float] = mapped_column(Float, nullable=False)
+    t7_close: Mapped[float] = mapped_column(Float, nullable=False)
+
+    t3_return: Mapped[float] = mapped_column(Float, nullable=False)
+    t7_return: Mapped[float] = mapped_column(Float, nullable=False)
+
+    spy_t3_return: Mapped[float] = mapped_column(Float, nullable=False)
+    spy_t7_return: Mapped[float] = mapped_column(Float, nullable=False)
+
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
