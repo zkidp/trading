@@ -6,8 +6,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
+    # No host port mapping by default to avoid conflicts with existing local Postgres.
+    # If you need host access, add: ports: ["5433:5432"] and update DATABASE_URL accordingly.
     volumes:
       - pgdata:/var/lib/postgresql/data
 
