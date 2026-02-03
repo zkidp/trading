@@ -21,5 +21,5 @@ TZ=America/New_York
 # Post-close evaluation + email brief
 # - evaluation computes T+3/T+7 outcomes when data becomes available
 # - brief generates markdown (and optionally emails it)
-15 16 * * 1-5 docker compose -f /home/zeke/trading/docker-compose.yml run --rm app python -m app.evaluate >> /home/zeke/trading/logs/evaluate.log 2>&1
+15 16 * * 1-5 docker compose -f /home/zeke/trading/docker-compose.yml run --rm app-lite python -m app.evaluate >> /home/zeke/trading/logs/evaluate.log 2>&1
 20 16 * * 1-5 /home/zeke/trading/scripts/daily_brief.sh >> /home/zeke/trading/logs/brief.log 2>&1

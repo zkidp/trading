@@ -4,10 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Generate daily brief markdown to BRIEF_MD_DIR (defaults to qmd path)
-docker compose run --rm app python -m app.daily_brief
+docker compose run --rm app-lite python -m app.daily_brief
 
 # Send email if SMTP env is configured in .env. If not configured, this step is skipped.
-docker compose run --rm app python - <<'PY'
+docker compose run --rm app-lite python - <<'PY'
 import os
 from pathlib import Path
 from datetime import datetime, timezone

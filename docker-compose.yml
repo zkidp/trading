@@ -12,7 +12,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   ib-gateway:
-    image: gnzsnz/ib-gateway-docker:latest
+    image: gnzsnz/ib-gateway:stable
     restart: unless-stopped
     environment:
       TWS_USERID: ${TWS_USERID}
@@ -40,6 +40,28 @@ services:
       REDDIT_USER_AGENT: ${REDDIT_USER_AGENT}
       DRY_RUN: ${DRY_RUN:-true}
       TRADING_MODE: ${TRADING_MODE:-paper}
+      RUN_PHASE: ${RUN_PHASE:-preopen}
+    command: ["python", "-m", "app.main"]
+
+  # Lite app runner for monitor/brief/evaluate: does NOT depend on ib-gateway.
+  app-lite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT}
+      DRY_RUN: ${DRY_RUN:-true}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      RUN_PHASE: ${RUN_PHASE:-monitor}
     command: ["python", "-m", "app.main"]
 
 volumes:

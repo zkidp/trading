@@ -5,4 +5,4 @@ cd "$(dirname "$0")/.."
 
 docker compose run --rm \
   -e RUN_PHASE=monitor \
-  app
+  app-lite
