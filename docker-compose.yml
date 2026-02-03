@@ -19,7 +19,8 @@ services:
       TWS_PASSWORD: ${TWS_PASSWORD}
       TRADING_MODE: ${TRADING_MODE:-paper}
     ports:
-      - "4001:4001"  # IB API
+      # Expose IB API port(s). This image often uses 4004.
+      - "4004:4004"
       - "5900:5900"  # VNC
 
   app:

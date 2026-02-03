@@ -28,13 +28,14 @@ class IBExecutor:
     def __init__(
         self,
         dry_run: bool = True,
-        host: str = "ib-gateway",
-        port: int = 4001,
+        host: str | None = None,
+        port: int | None = None,
         client_id: int = 7,
     ) -> None:
         self._dry_run = dry_run
-        self._host = host
-        self._port = port
+        # Default port depends on IB Gateway configuration; in our docker image it is commonly 4004.
+        self._host = host or os.getenv("IB_HOST", "ib-gateway")
+        self._port = int(port or int(os.getenv("IB_PORT", "4004")))
         self._client_id = client_id
         self._ib: IB | None = None
 
