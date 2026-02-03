@@ -46,3 +46,39 @@ class TradeExecution(Base):
     order_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class AccountSnapshot(Base):
+    __tablename__ = "account_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    net_liquidation: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_cash: Mapped[float | None] = mapped_column(Float, nullable=True)
+    buying_power: Mapped[float | None] = mapped_column(Float, nullable=True)
+    init_margin_req: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maint_margin_req: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class PositionSnapshot(Base):
+    __tablename__ = "position_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    position: Mapped[float] = mapped_column(Float, nullable=False)
+    avg_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unrealized_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class NewsAlert(Base):
+    __tablename__ = "news_alert"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    keyword: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

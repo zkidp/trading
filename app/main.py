@@ -30,13 +30,25 @@ def _get_bool_env(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _get_str_env(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    return default if raw is None else raw.strip()
+
+
+def _split_keywords(raw: str) -> list[str]:
+    kws = [x.strip().lower() for x in raw.split(",")]
+    return [x for x in kws if x]
+
+
 async def _async_main() -> int:
     dry_run = _get_bool_env("DRY_RUN", True)
     trading_mode = os.getenv("TRADING_MODE", "paper")
+    run_phase = _get_str_env("RUN_PHASE", "preopen")
 
     logger.info(
-        "AI-Quant 启动 | now_utc={} | dry_run={} | trading_mode={}",
+        "AI-Quant 启动 | now_utc={} | phase={} | dry_run={} | trading_mode={}",
         _utc_now().isoformat(),
+        run_phase,
         dry_run,
         trading_mode,
     )
@@ -66,6 +78,41 @@ async def _async_main() -> int:
             len(reddit_items),
             len(raw_items),
         )
+
+        # Monitor-only mode: keyword alerts (no AI / no trading).
+        if run_phase.lower() == "monitor":
+            raw_kw = _get_str_env(
+                "NEWS_KEYWORDS",
+                "trump,tariff,china,fed,powell,cpi,inflation,jobs,recession,shutdown,ai,nvidia,nvda,datacenter,gpu,compute,cloud,power,grid,utilities,semiconductor",
+            )
+            keywords = _split_keywords(raw_kw)
+            hits: dict[str, list[tuple[str, str, str]]] = {}
+            for item in raw_items:
+                title_l = item.raw_title.lower()
+                for kw in keywords:
+                    if kw and kw in title_l:
+                        hits.setdefault(kw, []).append((item.source, item.raw_title, item.url))
+
+            if hits:
+                engine = build_engine()
+                session_maker = build_session_maker(engine)
+                now_utc = _utc_now()
+                try:
+                    from app.db.alerts import insert_news_alerts
+
+                    async with session_maker() as session:
+                        total_alerts = 0
+                        for kw, rows in hits.items():
+                            total_alerts += await insert_news_alerts(session, keyword=kw, items=rows, created_at=now_utc)
+                        await session.commit()
+                finally:
+                    await engine.dispose()
+
+                logger.warning("新闻监控命中 | keywords={} | alerts={}", list(hits.keys()), sum(len(v) for v in hits.values()))
+            else:
+                logger.info("新闻监控：未命中关键词")
+
+            return 0
     except Exception:
         logger.exception("采集阶段异常：安全退出（不交易）")
         return 0
@@ -88,6 +135,9 @@ async def _async_main() -> int:
             len(raw_items),
             len(inserted_rows),
         )
+
+        # For preopen/postclose, it's useful to still track the account even if no trade happens.
+        # We'll snapshot later after we have Top1 (and possibly trade).
     except Exception:
         logger.exception("RawNews 入库阶段异常：安全退出（不交易）")
         return 0
@@ -183,9 +233,33 @@ async def _async_main() -> int:
 
         error: str | None = None
         result = None
+        snapshot_err: str | None = None
+
         try:
             async with IBExecutor(dry_run=dry_run_effective) as ex:
+                # Daily monitoring: record account + positions snapshot (best effort).
+                try:
+                    from app.broker.observer import fetch_account_values, fetch_positions
+                    from app.db.snapshots import insert_account_snapshot, insert_position_snapshots
+
+                    account_v = await fetch_account_values(ex.ib)
+                    positions_v = await fetch_positions(ex.ib)
+
+                    engine = build_engine()
+                    session_maker = build_session_maker(engine)
+                    try:
+                        async with session_maker() as session:
+                            await insert_account_snapshot(session, account_v, created_at=now_utc)
+                            await insert_position_snapshots(session, positions_v, created_at=now_utc)
+                            await session.commit()
+                    finally:
+                        await engine.dispose()
+                except Exception as e:
+                    snapshot_err = str(e)
+                    logger.exception("持仓/账户快照失败（不影响交易决策）")
+
                 result = await ex.buy_fractional_by_amount(top1.ticker, amount_usd=amount_usd)
+
         except Exception as e:
             error = str(e)
             raise
@@ -203,7 +277,7 @@ async def _async_main() -> int:
                         qty=None if result is None else result.qty,
                         dry_run=dry_run_effective,
                         order_status=None if result is None else result.order_status,
-                        error=error,
+                        error=error or snapshot_err,
                         created_at=now_utc,
                     )
                     await session.commit()

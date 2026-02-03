@@ -38,6 +38,12 @@ class IBExecutor:
         self._client_id = client_id
         self._ib: IB | None = None
 
+    @property
+    def ib(self) -> IB:
+        if self._ib is None:
+            raise RuntimeError("IB 未连接")
+        return self._ib
+
     async def __aenter__(self) -> "IBExecutor":
         await self.connect()
         return self
